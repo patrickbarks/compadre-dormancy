@@ -1,0 +1,111 @@
+---
+title: "Contribution of dormancy to life expectancy"
+author: Patrick Barks
+date: "`r Sys.Date()`"
+output: html_document
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.path="img/")
+```
+
+&nbsp;
+
+Do I need to worry about dormant stages when looking at plant life expectancy with [COMPADRE](https://www.compadre-db.org/)?
+
+```{r message=FALSE}
+library(tidyverse)
+library(RcompadreDev) # remotes::install_github("jonesor/Rcompadre", ref = "devel")
+```
+
+```{r fig.width=7.5, fig.height=5.5, dpi=300}
+# fetch compadre database (v 4.0.1)
+comp <- cdb_fetch("~/COMPADRE_v.4.0.1.RData")
+
+# subset to wild, unmanipulated populations with dormant stages
+comp_sub <- comp %>% 
+  cdb_flag() %>% 
+  filter(AnnualPeriodicity == 1,
+         MatrixCaptivity == "W",
+         MatrixTreatment == "Unmanipulated",
+         check_NA_U == FALSE,
+         check_zero_U == FALSE)
+
+# subset to matrices with both dormant and active stages classes
+comp_use <- comp_sub %>% 
+  mutate(has_dorm = mpm_has_dorm(.),
+         has_active = mpm_has_active(.)) %>% 
+  filter(has_dorm == TRUE, has_active == TRUE)
+
+# collapse to single mean matrix for each unique species x stage-structure
+comp_collapse <- comp_use %>% 
+  mutate(id_stage = cdb_id_stage_defs(.)) %>% 
+  cdb_collapse(columns = "id_stage")
+
+# extract matU and MatrixClassOrganized
+comp_unnest <- comp_collapse %>% 
+  mutate(matU = matU(.),
+         MatrixClassOrganized = MatrixClassOrganized(.))
+
+
+# function to calculate life expectancy from stage 'start'
+lifeExpectancy <- function(matU, start, stages = TRUE) {
+  N <- solve(diag(nrow(matU)) - matU)
+  sum(N[stages, start])
+}
+
+# calculate life expectancy from first non-propagule stage, with and without dormancy
+comp_l0 <- comp_unnest %>% 
+  mutate(stages_active = map(MatrixClassOrganized, ~ .x != "dorm")) %>% 
+  mutate(start = mpm_first_active(.)) %>% 
+  mutate(l0 = mapply(lifeExpectancy, matU, start)) %>%
+  mutate(l0_nodorm = mapply(lifeExpectancy, matU, start, stages_active)) %>% 
+  filter(l0 >= 1)
+  
+# collapse by species (only a couple species with multiple stage structures)
+comp_plot <- comp_l0 %>%
+  CompadreData() %>% 
+  group_by(SpeciesAccepted) %>% 
+  summarize(l0 = mean(l0), l0_nodorm = mean(l0_nodorm)) %>% 
+  mutate(Species = fct_reorder(SpeciesAccepted, l0))
+
+# arrange for plotting
+comp_gather <- comp_plot %>% 
+  select(Species, l0, l0_nodorm) %>% 
+  gather(type, l0, l0:l0_nodorm)
+
+# nice labels
+labFn <- function(x) {
+  lapply(x, function(x) paste(strsplit(x, " ")[[1]][1:2], collapse = " "))
+}
+
+# group labels and colours
+group_labs <- c("Full", "Excluding dormant stages")
+group_cols <- c("#045a8d", "#74a9cf")
+
+# plot
+ggplot(comp_plot) +
+  geom_segment(aes(x = Species, xend = Species, y = l0_nodorm, yend = l0), size = 0.3) +
+  geom_point(data = comp_gather, aes(Species, l0, col = type), size = 2.4) +
+  scale_x_discrete(labels = labFn) +
+  scale_y_log10() +
+  scale_color_manual(values = group_cols, labels = group_labs, name = NULL) +
+  coord_flip() +
+  labs(x = NULL, y = "Life expectancy (years)") +
+  theme(panel.grid = element_blank(),
+        axis.ticks.y = element_blank(),
+        legend.position = c(0.99, 0.01),
+        legend.justification = c(1, 0),
+        legend.background = element_blank(),
+        legend.key = element_blank(),
+        legend.key.height = unit(1, "lines"),
+        legend.text = element_text(size = 10),
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 12.5))
+```
+
+&nbsp;
+Probably not.
