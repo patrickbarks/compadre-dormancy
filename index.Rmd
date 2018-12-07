@@ -2,9 +2,7 @@
 title: "Contribution of dormancy to life expectancy"
 author: Patrick Barks
 date: "`r Sys.Date()`"
-output:
-  html_document:
-    css: style.css
+output: html_document
 ---
 
 ```{r setup, include=FALSE}
@@ -15,7 +13,7 @@ knitr::opts_chunk$set(
 
 &nbsp;
 
-Do I need to worry about dormant stages when looking at plant life expectancy with [COMPADRE](https://www.compadre-db.org/)?
+<font size="4">Do I need to worry about dormant stages when looking at plant life expectancy with [COMPADRE](https://www.compadre-db.org/)?</font>
 
 ```{r message=FALSE}
 library(tidyverse)
@@ -109,4 +107,4 @@ ggplot(comp_plot) +
 ```
 
 &nbsp;
-Probably not.
+<font size="4">Probably not.</font>
